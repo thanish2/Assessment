@@ -1,26 +1,70 @@
 import { useEffect, useState } from "react";
-import { fetchMCQs, submitMCQs } from "../api/assessment";
+import { fetchMCQs, submitMCQs,fetchAssessmentStatus,saveAnswer, startAssessment } from "../api/assessment";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button"; // Shadcn Button
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"; // Shadcn Card
-
+import { useRef } from "react";
 export default function MCQTest() {
   const [questions, setQuestions] = useState([]);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const[timeLeft,setTimeLeft]=useState(null);
   const navigate = useNavigate();
+  const hasStarted=useRef(false);
+
+  
 
   useEffect(() => {
-    fetchMCQs().then(setQuestions);
+    if(hasStarted.current)return;
+    hasStarted.current=true;
+    const token=localStorage.getItem("access");
+    if(!token){
+      navigate("/");
+    }
+
+    async function initializeTest(){
+      try{
+        const startData=await startAssessment();
+        setTimeLeft(startData.remaining_time);
+
+        const questionsData=await fetchMCQs();
+        setQuestions(questionsData);
+
+      }catch(err){
+        console.error("Initialization failed");
+      }
+      
+
+    }
+
+    initializeTest()
   }, []);
 
-  function handleSelect(qid, option) {
+  useEffect(()=>{
+    if(timeLeft==null)return;
+    if(timeLeft<=0){
+      handleSubmit();
+      return;
+    }
+    const timer=setInterval(()=>{
+      setTimeLeft((prev)=>prev-1);
+    },1000);
+    return () => clearInterval(timer);
+  },[timeLeft]);
+
+  async function handleSelect(qid, option) {
     setAnswers((prev) => ({
       ...prev,
       [qid]: option,
     }));
+
+    try{
+      await saveAnswer(qid,option);
+    }catch(err){
+      console.error("Failed to save");
+    }
   }
 
   async function handleSubmit() {
@@ -82,9 +126,18 @@ export default function MCQTest() {
   const isFirstQuestion = currentQuestionIndex === 0;
   const isLastQuestion = currentQuestionIndex === questions.length - 1;
 
+  function formatTime(seconds){
+    const mins=Math.floor(seconds/60);
+    const secs=seconds%60;
+    return `${mins}:${secs}`;
+  }
+
   return (
     <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4">
       <Card className="w-full max-w-2xl bg-white border-blue-200 shadow-lg rounded-lg">
+        <div className="text-red-600 font-bold text-lg mb-4">
+          Time Remaining: {formatTime(timeLeft)}
+        </div>
         <CardHeader className="bg-blue-100 text-blue-900 rounded-t-lg">
           <CardTitle className="text-xl font-semibold">
             Question {currentQuestionIndex + 1} of {questions.length}

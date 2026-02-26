@@ -12,3 +12,15 @@ def analyze_topics(topic_scores, topic_total):
             weaknesses.append(topic)
 
     return strengths, weaknesses
+
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
+
+def sync_user_from_token(request):
+    user = request.user
+
+    if not user or not user.is_authenticated:
+        return None
+
+    return user
